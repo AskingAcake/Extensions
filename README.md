@@ -8,7 +8,7 @@
  But editing the project wont apply on
  The original project
 
-# **Extensions:**
+# Extensions:
 1. Simple Brain
 
  More are planned to
