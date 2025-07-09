@@ -8,8 +8,5 @@ To this repo!
  But editing the project wont apply on
  The original project
 
-# Extensions:
-1. Simple Brain
-
- More are planned to
+ More extensions are planned to
  Be added
