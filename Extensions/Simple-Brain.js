@@ -32,6 +32,7 @@ this.name = name;
 this.memory = {};
 this.rules = [];
 this.lastResult = "idle";
+this.mode = "Weights"; // default brain mode
 }
 
 think() {
@@ -53,11 +54,13 @@ break;
 }
 
 if (pass) {
-for (let i = 0; i < rule.weight; i++) {
+let count = this.mode === "Weights"
+? Math.round(rule.weight)
+: Math.round((rule.weight / 100) * 100); // convert percent to count
+for (let i = 0; i < count; i++) {
 matchingRules.push(rule.result);
 }
 }
-
 } catch {}
 }
 
@@ -79,7 +82,7 @@ key: key,
 op: op,
 value: value,
 result: result,
-weight: 1
+weight: this.mode === "Weights" ? 1 : 1 // simplified for now
 });
 }
 }
@@ -108,6 +111,61 @@ arguments: {
 NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
 KEY: { type: Scratch.ArgumentType.STRING, defaultValue: 'mood' },
 VALUE: { type: Scratch.ArgumentType.STRING, defaultValue: 'happy' }
+}
+},
+{
+opcode: 'addMemoryWithWeight',
+blockType: Scratch.BlockType.COMMAND,
+text: 'add memory [KEY]:[VALUE] to [NAME] with weight [WEIGHT]',
+arguments: {
+NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
+KEY: { type: Scratch.ArgumentType.STRING, defaultValue: 'mood' },
+VALUE: { type: Scratch.ArgumentType.STRING, defaultValue: 'happy' },
+WEIGHT: { type: Scratch.ArgumentType.NUMBER, defaultValue: 10 }
+}
+},
+{
+opcode: 'addMemoryWithPercent',
+blockType: Scratch.BlockType.COMMAND,
+text: 'add memory [KEY]:[VALUE] to [NAME] with percent [PERCENT]%',
+arguments: {
+NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
+KEY: { type: Scratch.ArgumentType.STRING, defaultValue: 'mood' },
+VALUE: { type: Scratch.ArgumentType.STRING, defaultValue: 'happy' },
+PERCENT: { type: Scratch.ArgumentType.NUMBER, defaultValue: 25 }
+}
+},
+{
+opcode: 'setBrainType',
+blockType: Scratch.BlockType.COMMAND,
+text: 'set brain of [NAME] to type [TYPE]',
+arguments: {
+NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
+TYPE: {
+type: Scratch.ArgumentType.STRING,
+menu: 'brainTypes',
+defaultValue: 'Weights'
+}
+}
+},
+{
+opcode: 'setWeightOfResult',
+blockType: Scratch.BlockType.COMMAND,
+text: 'set weight of [RESULT] in [NAME] to [WEIGHT]',
+arguments: {
+NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
+RESULT: { type: Scratch.ArgumentType.STRING, defaultValue: 'dance' },
+WEIGHT: { type: Scratch.ArgumentType.NUMBER, defaultValue: 10 }
+}
+},
+{
+opcode: 'setPercentOfResult',
+blockType: Scratch.BlockType.COMMAND,
+text: 'set percent of [RESULT] in [NAME] to [PERCENT]%',
+arguments: {
+NAME: { type: Scratch.ArgumentType.STRING, defaultValue: 'Bot1' },
+RESULT: { type: Scratch.ArgumentType.STRING, defaultValue: 'dance' },
+PERCENT: { type: Scratch.ArgumentType.NUMBER, defaultValue: 25 }
 }
 },
 {
@@ -183,37 +241,86 @@ menus: {
 operators: {
 acceptReporters: false,
 items: ['=', '>', '<', 'includes']
+},
+brainTypes: {
+acceptReporters: false,
+items: ['Weights', 'Percentage']
 }
 }
 };
 }
 
+// === New Brain Type Functions ===
+setBrainType(args) {
+const agent = agents[args.NAME];
+if (!agent) return;
+agent.mode = args.TYPE;
+}
+
+addMemoryWithWeight(args) {
+const agent = agents[args.NAME];
+if (!agent || agent.mode !== 'Weights') return 'ERROR: Brain is using ' + agent?.mode;
+agent.memory[args.KEY] = args.VALUE;
+agent.rules.push({
+key: args.KEY,
+op: '=',
+value: args.VALUE,
+result: args.VALUE,
+weight: Number(args.WEIGHT)
+});
+}
+
+addMemoryWithPercent(args) {
+const agent = agents[args.NAME];
+if (!agent || agent.mode !== 'Percentage') return 'ERROR: Brain is using ' + agent?.mode;
+agent.memory[args.KEY] = args.VALUE;
+agent.rules.push({
+key: args.KEY,
+op: '=',
+value: args.VALUE,
+result: args.VALUE,
+weight: Number(args.PERCENT)
+});
+}
+
+setWeightOfResult(args) {
+const agent = agents[args.NAME];
+if (!agent || agent.mode !== 'Weights') return 'ERROR: Brain is using ' + agent?.mode;
+for (const rule of agent.rules) {
+if (rule.result === args.RESULT) rule.weight = Number(args.WEIGHT);
+}
+}
+
+setPercentOfResult(args) {
+const agent = agents[args.NAME];
+if (!agent || agent.mode !== 'Percentage') return 'ERROR: Brain is using ' + agent?.mode;
+for (const rule of agent.rules) {
+if (rule.result === args.RESULT) rule.weight = Number(args.PERCENT);
+}
+}
+
+// === Existing Logic ===
 createAgent(args) {
 agents[args.NAME] = new MindAgent(args.NAME);
 }
-
 setMemory(args) {
 const agent = agents[args.NAME];
 if (!agent) return;
 agent.memory[args.KEY] = SimpleBrain._parse(args.VALUE);
 }
-
 getMemory(args) {
 const agent = agents[args.NAME];
 if (!agent) return 'ERROR';
 return agent.memory[args.KEY] ?? 'undefined';
 }
-
 hasMemory(args) {
 const agent = agents[args.NAME];
 if (!agent) return false;
 return Object.hasOwn(agent.memory, args.KEY);
 }
-
 addRule(args) {
 const agent = agents[args.NAME];
 if (!agent) return;
-
 agent.rules.push({
 key: args.KEY,
 op: args.OPERATOR,
@@ -222,25 +329,21 @@ result: args.RESULT,
 weight: Number(args.WEIGHT)
 });
 }
-
 clearRules(args) {
 const agent = agents[args.NAME];
 if (!agent) return;
 agent.rules = [];
 }
-
 runLogic(args) {
 const agent = agents[args.NAME];
 if (!agent) return "ERROR";
 return agent.think();
 }
-
 getLastResult(args) {
 const agent = agents[args.NAME];
 if (!agent) return "ERROR";
 return agent.lastResult;
 }
-
 learnRule(args) {
 const agent = agents[args.NAME];
 if (!agent) return;
